@@ -12,11 +12,8 @@ RUN npm install
 # 4. Den Rest des Codes kopieren
 COPY . .
 
-# 5. Die App bauen (Next.js Build)
-RUN npm run build
-
-# 6. Port freigeben (Next.js läuft standardmäßig auf 3000)
+# 5. Port freigeben (Next.js läuft standardmäßig auf 3000)
 EXPOSE 3000
 
-# 7. Die App starten
-CMD ["npm", "start"]
+# 6. Die App im Development-Modus starten (Turbopack Build hat Probleme)
+CMD ["npm", "run", "dev"]

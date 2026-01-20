@@ -5,5 +5,9 @@ services:
     restart: always
     ports:
       - "80:3000"  # Erreichbar unter Port 80 (normale Web-Adresse), intern 3000
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=development
