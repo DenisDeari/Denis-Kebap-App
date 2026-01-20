@@ -8,8 +8,9 @@ import { CancelModal } from "@/components/orders/CancelModal";
 import { OrderStatusButton } from "@/components/orders/OrderStatusButton";
 import { OrderProductCell } from "@/components/orders/OrderProductCell";
 import { formatPrice } from "@/lib/utils";
-import { sortByPickupTimeAsc, calculateBlockedMinutesForOrder } from "@/lib/timeSlots";
-import { clearAllOrders, getLocations } from "@/lib/storage";
+import { sortByPickupTimeAsc } from "@/lib/timeSlots";
+import { clearAllOrders, getLocations, getProducts } from "@/lib/storage";
+import { Order, Location, Product } from "@/types";
 
 export default function LatestOrdersPage() {
   const params = useParams();
@@ -78,7 +79,7 @@ export default function LatestOrdersPage() {
   };
 
   // ============================================
-  // TIMESLOT VISUALISIERUNG
+  // TIMESLOT VISUALISIERUNG (NEU GEBAUT)
   // ============================================
   
   // Track newly blocked slots for animation
@@ -92,7 +93,7 @@ export default function LatestOrdersPage() {
       status: 'free' | 'booked' | 'blocked' | 'past' | 'prep';
       orderContact?: string;
       isSystemBlocker?: boolean;
-      prepForOrder?: string; // Which order this prep time is for
+      prepForOrder?: string;
     }> = [];
 
     const now = currentTime;
@@ -101,17 +102,31 @@ export default function LatestOrdersPage() {
     const currentTotalMins = currentHours * 60 + currentMinutes;
     const todayStr = now.toISOString().split('T')[0];
 
-    // Get active location for prep time calculation
+    // Get location and products
     const locations = getLocations();
     const activeLocation = locations.find((loc) => loc.id === locationId);
+    const allProducts = getProducts();
 
-    // Helper: Convert time string to minutes
+    // Helper functions
     const timeToMinutes = (timeStr: string): number => {
       const [h, m] = timeStr.split(':').map(Number);
       return h * 60 + m;
     };
 
-    // Build a map of all blocked minutes (pickup times + prep times)
+    const minutesToTime = (mins: number): string => {
+      const h = Math.floor(mins / 60) % 24;
+      const m = mins % 60;
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    };
+
+    // Get today's orders (exclude cancelled)
+    const todayOrders = orders.filter((o) => {
+      if (o.status === 'CANCELLED' || !o.pickupTime) return false;
+      const orderDate = new Date(o.createdAt).toISOString().split('T')[0];
+      return orderDate === todayStr;
+    });
+
+    // Build slot info map
     const slotInfo = new Map<string, {
       status: 'booked' | 'blocked' | 'prep';
       orderContact?: string;
@@ -119,43 +134,51 @@ export default function LatestOrdersPage() {
       prepForOrder?: string;
     }>();
 
-    // Process all orders
-    const todayOrders = orders.filter((o) => {
-      if (o.status === 'CANCELLED' || !o.pickupTime) return false;
-      const orderDate = new Date(o.createdAt).toISOString().split('T')[0];
-      return orderDate === todayStr;
-    });
-
-    // First pass: Mark all pickup times (booked/blocked)
+    // Process each order
     for (const order of todayOrders) {
       const isSystemBlocker = order.status === 'BLOCKED' && 
         order.products?.some((p) => p.name === 'System Blocker');
 
-      // Mark the pickup time itself
+      const pickupMins = timeToMinutes(order.pickupTime!);
+
+      // 1. Mark the pickup time itself
       slotInfo.set(order.pickupTime!, {
         status: isSystemBlocker ? 'blocked' : 'booked',
         orderContact: order.contact,
         isSystemBlocker,
       });
-    }
 
-    // Second pass: Mark all prep times (can overlap with each other, but not with bookings)
-    for (const order of todayOrders) {
-      const isSystemBlocker = order.status === 'BLOCKED' && 
-        order.products?.some((p) => p.name === 'System Blocker');
-
-      // Calculate and mark prep time slots (only for non-blocker orders)
+      // 2. Calculate and mark prep time (only for real orders, not system blockers)
       if (!isSystemBlocker && activeLocation) {
-        const blockMins = calculateBlockedMinutesForOrder(order, activeLocation);
-        const pickupTotalMins = timeToMinutes(order.pickupTime!);
+        // Calculate total seconds for this order
+        let totalSeconds = 0;
+        
+        for (const orderProduct of order.products) {
+          // Find product to check applicablePreparationTime
+          const product = allProducts.find((p) => p.name === orderProduct.name);
+          
+          // Skip if product not found or applicablePreparationTime is false
+          if (!product || product.applicablePreparationTime === false) {
+            continue;
+          }
+          
+          // Use regularDisplaySeconds (default 60) - simple and consistent
+          const prepSecondsPerItem = activeLocation.regularDisplaySeconds ?? 60;
+          totalSeconds += orderProduct.quantity * prepSecondsPerItem;
+        }
 
-        // Mark minutes BEFORE the pickup time as prep
-        for (let i = 1; i < blockMins; i++) {
-          const prepMinute = pickupTotalMins - i;
-          if (prepMinute >= 0) {
-            const prepTimeStr = `${Math.floor(prepMinute / 60).toString().padStart(2, '0')}:${(prepMinute % 60).toString().padStart(2, '0')}`;
+        // Convert to minutes (round up)
+        const blockMinutes = Math.ceil(totalSeconds / 60);
+
+        // Mark prep slots BEFORE pickup time
+        // Example: 10 minutes block for 16:50 pickup -> prep is 16:41-16:49 (9 slots)
+        // The pickup time (16:50) is already marked as booked above
+        for (let i = 1; i < blockMinutes; i++) {
+          const prepMins = pickupMins - i;
+          if (prepMins >= 0) {
+            const prepTimeStr = minutesToTime(prepMins);
             
-            // Only don't overwrite actual bookings (booked/blocked), prep can be overwritten
+            // Don't overwrite booked/blocked slots
             const existing = slotInfo.get(prepTimeStr);
             if (!existing || existing.status === 'prep') {
               slotInfo.set(prepTimeStr, {
@@ -168,17 +191,13 @@ export default function LatestOrdersPage() {
       }
     }
 
-    // Generate slots for the next 60 minutes
+    // Generate display slots (5 minutes past + 60 minutes future)
     for (let i = -5; i < 60; i++) {
-      const slotTotalMins = currentTotalMins + i;
-      const slotHours = Math.floor(slotTotalMins / 60) % 24;
-      const slotMins = slotTotalMins % 60;
-      const timeStr = `${slotHours.toString().padStart(2, '0')}:${slotMins.toString().padStart(2, '0')}`;
-
+      const slotMins = currentTotalMins + i;
+      const timeStr = minutesToTime(slotMins);
       const info = slotInfo.get(timeStr);
 
       if (i < 0) {
-        // Past slots
         slots.push({
           time: timeStr,
           status: 'past',
