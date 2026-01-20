@@ -1,5 +1,5 @@
 # 1. Basis-Image: Ein leichtes Node.js Image
-FROM node:18-alpine
+FROM node:20-alpine
 
 # 2. Arbeitsverzeichnis im Container erstellen
 WORKDIR /app
