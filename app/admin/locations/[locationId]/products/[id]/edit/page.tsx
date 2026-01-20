@@ -86,8 +86,7 @@ export default function EditProductPage() {
     }
 
     if (product) {
-      await updateProduct({
-        ...product,
+      await updateProduct(product.id, {
         name: formData.productName,
         price: formData.productPrice,
         categoryId: formData.menuName,

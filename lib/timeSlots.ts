@@ -24,8 +24,35 @@ export function calculateBlockedMinutesForOrder(order: Order, location: Location
   // Summe der Sekunden für alle Produkte mit applicablePreparationTime
   let totalSeconds = 0;
   
-  // Standard-Werte falls nicht gesetzt
-  const prepSeconds = location.rushHourDisplaySeconds ?? 90;
+  // Prüfe ob Pickup-Zeit in Rush Hour liegt (falls vorhanden)
+  let isRushHour = false;
+  if (order.pickupTime && location.openDays) {
+    const [hour, minute] = order.pickupTime.split(":").map(Number);
+    const totalMinutes = hour * 60 + minute;
+    
+    // Finde aktuellen Tag
+    const orderDate = new Date(order.createdAt);
+    const dayOfWeek = orderDate.getDay();
+    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const currentDay = dayNames[dayOfWeek];
+    const dayConfig = location.openDays.find((d) => d.day === currentDay);
+    
+    if (dayConfig) {
+      const [rushStartHour, rushStartMin] = dayConfig.rushStart.split(":").map(Number);
+      const rushStartTotal = rushStartHour * 60 + rushStartMin;
+      
+      const [rushEndHour, rushEndMin] = dayConfig.rushEnd.split(":").map(Number);
+      const rushEndTotal = rushEndHour * 60 + rushEndMin;
+      
+      isRushHour = totalMinutes >= rushStartTotal && totalMinutes < rushEndTotal;
+    }
+  }
+  
+  // Verwende korrekte Sekunden basierend auf Rush Hour oder regulärer Zeit
+  // Standard: 60 Sekunden (1 Minute) falls nicht konfiguriert
+  const prepSeconds = isRushHour
+    ? (location.rushHourDisplaySeconds ?? 60)
+    : (location.regularDisplaySeconds ?? 60);
   
   for (const item of order.products) {
     // Produkte ohne applicablePreparationTime werden übersprungen

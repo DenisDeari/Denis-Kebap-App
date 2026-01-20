@@ -122,9 +122,10 @@ export default function ShoppingCart({
         const isRush = order.pickupTime ? isRushHourTime(order.pickupTime) : false;
         
         // Verwende Location-Werte: rushHourDisplaySeconds oder regularDisplaySeconds
+        // Standard: 60 Sekunden (1 Minute) falls nicht konfiguriert
         const prepSeconds = isRush
-          ? (activeLocation.rushHourDisplaySeconds ?? 0)
-          : (activeLocation.regularDisplaySeconds ?? 0);
+          ? (activeLocation.rushHourDisplaySeconds ?? 60)
+          : (activeLocation.regularDisplaySeconds ?? 60);
 
         totalSeconds += orderProduct.quantity * prepSeconds;
       }
