@@ -1,0 +1,9 @@
+services:
+  webapp:
+    build: .
+    container_name: denis-kebap-app
+    restart: always
+    ports:
+      - "80:3000"  # Erreichbar unter Port 80 (normale Web-Adresse), intern 3000
+    environment:
+      - NODE_ENV=production
