@@ -436,7 +436,7 @@ export default function Home() {
     const order: Order = {
       id: generateId(),
       contact: "Kunde", // Könnte später durch ein Formular ergänzt werden
-      time: now.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }),
+      time: now.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", hour12: false }),
       pickupTime: pickupTime,
       products: products,
       price: totalPrice,

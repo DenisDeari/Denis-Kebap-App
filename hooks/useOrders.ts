@@ -136,7 +136,7 @@ export function useOrders({ locationId, pollInterval = 3000, enableBlockingCheck
             contact: "SYSTEM",
             locationId: locationId,
             createdAt: currentTimeRef.current.toISOString(),
-            time: currentTimeRef.current.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
+            time: currentTimeRef.current.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', hour12: false }),
             pickupTime: nextSlot,
             paymentStatus: "Unpaid",
             status: "BLOCKED",
